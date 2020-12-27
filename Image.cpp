@@ -17,6 +17,8 @@ char ImgFileName[512];
 int ImageWidth;
 int ImageHeight;
 int ImageColor;
+BITMAPFILEHEADER bfImage;
+BITMAPINFOHEADER biImage;
 
 /************************************************************************************************
 *																								*
@@ -96,77 +98,6 @@ void ShowImage(unsigned char* Image, int wImage, int hImage, int xPos, int yPos)
 	}
 }
 
-void Rotate( char* src, int angle,int height,int width)
-{
-	double theta = angle * 3.141592 / 180.0;
-	float c = cos(theta);
-	float s = sin(theta);
-
-	/* 计算中点坐标 */
-	int h = (height + 1) / 2;
-	int w = (width + 1) / 2;
-
-	/* 计算矩形4个顶点旋转后对应的坐标 */
-	float x0 = -w * c - h * s;
-	float y0 = -h * c + w * s;
-	float x1 = w * c - h * s;
-	float y1 = -h * c - w * s;
-	float x2 = w * c + h * s;
-	float y2 = h * c - w * s;
-	float x3 = -w * c + h * s;
-	float y3 = h * c + w * s;
-
-	/* 计算旋转后的图像的高度和宽度 */
-	float width1 = fabs(x2 - x0);
-	float width2 = fabs(x3 - x1);
-	float height1 = fabs(y2 - y0);
-	float height2 = fabs(y3 - y1);
-
-
-	w = (width1 > width2 ? width1 : width2) ;
-	h = (height1 > height2 ? height1 : height2) ;
-
-	/* 创建图像数据缓冲区 */
-	//dst.rows = h;
-	//dst.cols = w;
-	//dst.Create(dst.rows, dst.cols, 3);
-	
-
-	/* 计算原始像素坐标对应的目标坐标 */
-	int di = x0 + w / 2;
-	int dj = y0 + h / 2;
-	//h = 1.5 * h;
-	//w = 1.5 * w;
-	char* dst = new char[h * w * 3]();
-	for (int i = 0; i < height; i++)
-	{
-		for (int j = 0; j < width; j++)
-		{
-			int x = i * c + j * s + di;
-			int y = j * c - i * s + dj;
-			int dstOft = (x * w + y) * 3;
-			int srcOft = (i * width + j) * 3;
-
-			dst[dstOft + 0] = src[srcOft + 0]; // B
-			dst[dstOft + 1] = src[srcOft + 1]; // G
-			dst[dstOft + 2] = src[srcOft + 2]; // R
-		}
-	}
-	int i, j;
-	int r, g, b;
-	for (i = 0; i < h; i++)
-	{
-		for (j = 0; j < w; j++)
-		{
-			int index =  (i  * w  + j) * ImageColor;
-			r = dst[index + 2];
-			g = dst[index + 1];
-			b = dst[index];
-			SetPixel(hWinDC, j , i , RGB(r, g, b));
-		}
-
-	}
-}
 /************************************************************************************************
 *																								*
 *	获取文件名函数OpenImageFile(char *OPDLTitle)												*
@@ -205,24 +136,11 @@ void OpenImageFile(char* OPDLTitle)
 
 }
 
-void WriteBMPImage(LPSTR ImageFileName, char* Image, int wImage, int hImage, BITMAPFILEHEADER bfImage, BITMAPINFOHEADER biImage)
+void WriteBMPImage(LPSTR ImageFileName, char* Image, int wImage, int hImage)
 {
 	OFSTRUCT of;
 	HFILE Image_fp;
-	/*
-	* 灰度未完成
-	rgbq* fq = (rgbq*)malloc(256 * sizeof(rgbq));
-	for (int i = 0;i < 256;i++)
-	{
-		 fq[i].rgbBlue = fq[i].rgbGreen = fq[i].rgbRed = i;
-		  //fq[i].rgbReserved=0;
-	}
-	biImage.biBitCount = 8;
-	biImage.biSizeImage = biImage.biSizeImage / 3;
-	biImage.biSize = 40;
-	bfImage.bfOffBits = 54 + 256 * sizeof(rgbq);
-	bfImage.bfSize = biImage.biSizeImage + bfImage.bfOffBits;
-	*/
+	
 	unsigned int m_row_size = 4 * ((3 * wImage + 3) / 4);
 	biImage.biSizeImage = m_row_size * hImage * 3;
 	biImage.biSize = 40;
@@ -230,16 +148,16 @@ void WriteBMPImage(LPSTR ImageFileName, char* Image, int wImage, int hImage, BIT
 	biImage.biWidth = wImage;
 	biImage.biHeight = hImage;
 	bfImage.bfSize = biImage.biSizeImage + bfImage.bfOffBits;
+	
 	Image_fp = OpenFile(ImageFileName, &of, OF_CREATE);
 	_llseek(Image_fp, 0, 0);
 	_lwrite(Image_fp, (char*)&bfImage, sizeof(BITMAPFILEHEADER));
 	_lwrite(Image_fp, (char*)&biImage, sizeof(BITMAPINFOHEADER));
-	//_lwrite(Image_fp, (char*)&fq, 256 * sizeof(rgbq));
 	_llseek(Image_fp, bfImage.bfOffBits, 0);
 	_lwrite(Image_fp, Image, biImage.biSizeImage);
 
 	_lclose(Image_fp);
-
+	
 	return;
 }
 
@@ -339,8 +257,7 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 {
 	OFSTRUCT of;
 	HFILE Image_fp;
-	BITMAPFILEHEADER bfImage;
-	BITMAPINFOHEADER biImage;
+	
 	Image_fp = OpenFile(ImageFileName, &of, OF_READ);
 	if (Image_fp == HFILE_ERROR)
 	{
@@ -372,10 +289,11 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 	erosion(gray, ImageWidth, ImageHeight,1,1);
 	dilation(gray, ImageWidth, ImageHeight,2,2);
 	dilation(gray, ImageWidth, ImageHeight,2,2);
+	//erosion(gray, ImageWidth, ImageHeight, 1, 1);
 
 	
 	int *rect = make_mask(gray, ImageWidth, ImageHeight);
-	//ShowImage((char*)gray, ImageWidth, ImageHeight, 0, 0);
+	//ShowImage(gray, ImageWidth, ImageHeight, 0, 0);
 	//ShowBMPImage((unsigned char*)oImage, ImageWidth, ImageHeight, 0, 0);
 	//showLicense((unsigned char*)oImage, ImageWidth, ImageHeight, rect);
 	
@@ -390,7 +308,13 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 
 	RGBToGrayProcessing(license, license_gray, w, h);
 
+
 	OTSU((unsigned char*)license_gray,h,w);
+
+	
+	//dilation((unsigned char*)license_gray, w, h, 1, 1);
+	//erosion((unsigned char*)license_gray, w, h, 1, 1);
+
 
 	unsigned char * new_img =  remove_upanddown_border((unsigned char*)license_gray, w, h);
 
@@ -433,7 +357,9 @@ unsigned char* RGBToHSV(char* Image, int wImage, int hImage) {
 	//二值化的蓝色区域图形
 	unsigned char* oImage = new unsigned char[wImage * hImage];
 	memset(oImage, 0, wImage * hImage);
+	double avg_v = 0;
 	for (i = 0; i < hImage; i++) {
+		double w_v = 0;
 		for (j = 0; j < wImage; j++) {
 			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
 			r = (BYTE) Image[index + 2];
@@ -463,11 +389,14 @@ unsigned char* RGBToHSV(char* Image, int wImage, int hImage) {
 			//Image[index + 2] = h;
 			//Image[index + 1] = s;
 			//Image[index] = v;
+			w_v += v;
 			if (h >= 100 && h <= 124 && s >= 140 && v >= 70)
 				oImage[i * wImage + j] = 255;
 			}
 		
+		avg_v = ((avg_v * i) + w_v) / (i + 1);
 	}
+
 	return oImage;
 }
 
@@ -745,6 +674,7 @@ vector<pair<int, int>> find_waves(double threshold, int* histogram, int len) {
 		wave_peaks.push_back(pair<int, int>(up_point, len - 1));
 	return wave_peaks;
 }
+
 unsigned char* remove_upanddown_border(unsigned char* img,int w,int h) {
 	int* row_histogram = new int[h]();
 	int row_min = w * 255;
@@ -795,8 +725,9 @@ unsigned char* remove_upanddown_border(unsigned char* img,int w,int h) {
 	
 		
 }
-void my_reszie(unsigned char* img, int ow, int oh, int nw, int nh) {
-	unsigned char* new_img = new unsigned char[nw * nh];
+
+void my_reszie(unsigned char* img, int ow, int oh, int nw, int nh,int xPos) {
+	unsigned char* new_img = new unsigned char[nw * nh * 3];
 	double w_ratio = (double)ow / nw;
 	double h_ratio = (double)oh / nh;
 	for (int i = 0; i < nw; ++i)
@@ -807,7 +738,12 @@ void my_reszie(unsigned char* img, int ow, int oh, int nw, int nh) {
 		{
 			int sy = floor(j * h_ratio);
 			sy = min(sy, oh - 1);
-			new_img[nw * j + i] = img[ow * sy + sx];
+			//重排成BMP格式，满足对齐所以无需计算row_size
+			int index = ((nh - j - 1) * nw + i) * 3;
+			new_img[index ] = img[ow * sy + sx];
+			new_img[index  +1] = img[ow * sy + sx];
+			new_img[index  +2] = img[ow * sy + sx];
+
 		}
 	}
 	/*
@@ -818,7 +754,11 @@ void my_reszie(unsigned char* img, int ow, int oh, int nw, int nh) {
 		}
 	}
 	*/
-	ShowImage(new_img, nw, nh, 100, 100);
+	
+	char name[30];
+	sprintf(name, "%d.bmp", xPos);
+	ShowBMPImage(new_img, nw, nh, xPos, 100);
+	WriteBMPImage(name, (char*)new_img, nw, nh);
 
 }
 void char_segmentation(unsigned char* img, int w, int h) {
@@ -831,7 +771,7 @@ void char_segmentation(unsigned char* img, int w, int h) {
 	}
 	int tmp = 0, new_peak = 0, maxBlock = 0;
 	vector<int*>	zifuBlock;
-	for (int i = 2; i < w ; i++) {
+	for (int i = 0; i < w ; i++) {
 		if (col_histogram[i] != 0 && new_peak != 0)
 			tmp += col_histogram[i];
 		else if (col_histogram[i] != 0 && new_peak == 0) {
@@ -847,13 +787,19 @@ void char_segmentation(unsigned char* img, int w, int h) {
 		}
 	}
 	vector<int*> licence_block;
+	double avg_w = 0;
 	for (int i = 0; i < zifuBlock.size(); i++) {
-		if (zifuBlock[i][0] > 0.05 * maxBlock)
+		if (zifuBlock[i][0] > 0.1 * maxBlock) {
+			//排除左边缘
+			if (licence_block.size() == 0 && zifuBlock[i][0] < 0.5 * maxBlock)
+				continue;
 			licence_block.push_back(zifuBlock[i]);
+			avg_w += zifuBlock[i][2] - zifuBlock[i][1];
+		}
 		if (licence_block.size() == 7)
 			break;
 	}
-	
+	avg_w = avg_w / 7;
 	for (int i = 0; i < licence_block.size(); i++) {
 		int* block = licence_block[i];
 		for (int j = 0; j < h; j++) {
@@ -863,14 +809,25 @@ void char_segmentation(unsigned char* img, int w, int h) {
 			}
 		}
 	}
-	
-	int* block = licence_block[0];
-	int nw = block[2] - block[1];
-	unsigned char* first_block = new unsigned char[h * nw]();
-	for (int j = 0; j < h; j++) {
-		for (int k = 0; k < nw; k++) {
-			first_block[j * nw + k] = img[j * w + block[1] + k];
+	for (int i = 0; i < licence_block.size(); i++) {
+		int* block = licence_block[i];
+		int nw = block[2] - block[1];
+		//如果为1，则向两边扩张
+		if (nw < avg_w/2) {
+			block[1] = block[1] - avg_w / 3;
+			block[2] = block[2] + avg_w / 3;
+			nw = block[2] - block[1];
+		}else
+			nw += 2;
+		int nh = h + 4;
+		unsigned char* first_block = new unsigned char[nh * nw]();
+		for (int j = 0; j < h; j++) {
+			for (int k = 0; k < nw; k++) {
+				first_block[(j+2) * nw + k] = img[j * w + block[1] - 1 + k];
+			}
 		}
+		my_reszie(first_block, nw, nh, 32, 40, i * 40);
 	}
-	my_reszie(first_block, nw, h, 32, 40);
+
+	
 }
