@@ -17,6 +17,7 @@ char ImgFileName[512];
 int ImageWidth;
 int ImageHeight;
 int ImageColor;
+int Avg_s,Avg_v;
 BITMAPFILEHEADER bfImage;
 BITMAPINFOHEADER biImage;
 
@@ -286,25 +287,30 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 	//ShowBMPImage((unsigned char*)oImage, ImageWidth, ImageHeight, 0, 0);
 
 	unsigned char* gray= RGBToHSV(oImage, ImageWidth, ImageHeight);
+	dilation(gray, ImageWidth, ImageHeight, 1, 1);
 	erosion(gray, ImageWidth, ImageHeight,1,1);
 	dilation(gray, ImageWidth, ImageHeight,2,2);
-	dilation(gray, ImageWidth, ImageHeight,2,2);
+	dilation(gray, ImageWidth, ImageHeight,3,2);
 	//erosion(gray, ImageWidth, ImageHeight, 1, 1);
 
-	
-	int *rect = make_mask(gray, ImageWidth, ImageHeight);
 	//ShowImage(gray, ImageWidth, ImageHeight, 0, 0);
+	//ShowImage(gray, ImageWidth, ImageHeight, 0, 0);
+
+	int *rect = make_mask(gray, ImageWidth, ImageHeight);
+	
 	//ShowBMPImage((unsigned char*)oImage, ImageWidth, ImageHeight, 0, 0);
 	//showLicense((unsigned char*)oImage, ImageWidth, ImageHeight, rect);
 	
 	
-	int h = rect[3] - rect[1], w = rect[2] - rect[0];
+	
 	
 	char* license = cut_license(rect, oImage);
 
+	int h = rect[3] - rect[1], w = rect[2] - rect[0];
+
 	char* license_gray = new char[h * w]();
 
-	//ShowImage(license_gray, w, h, 0, 0);
+	//ShowImage((unsigned char*)license, w, h, 0, 0);
 
 	RGBToGrayProcessing(license, license_gray, w, h);
 
@@ -312,11 +318,14 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 	OTSU((unsigned char*)license_gray,h,w);
 
 	
+	
 	//dilation((unsigned char*)license_gray, w, h, 1, 1);
 	//erosion((unsigned char*)license_gray, w, h, 1, 1);
 
 
 	unsigned char * new_img =  remove_upanddown_border((unsigned char*)license_gray, w, h);
+
+	//ShowImage((unsigned char*)new_img, w, ImageHeight, 0, 0);
 
 	char_segmentation(new_img, w, ImageHeight);
 
@@ -324,22 +333,53 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 
 	//Rotate(license, -30, h, w);
 
-	//ShowBMPImage((unsigned char*)license, w, h, 0, 0);
+	
 
 	//WriteBMPImage("F:\\detection\\data\\ww.bmp", license, w, h, bfImage, biImage);
 	//paint border for license
-	/*for (int i = rect[0];i <= rect[2];i++) {
+	for (int i = rect[0];i <= rect[2];i++) {
 		SetPixel(hWinDC, i, rect[1], RGB(0, 0, 255));
 		SetPixel(hWinDC, i, rect[3], RGB(0, 0, 255));
 	}
 	for (int i = rect[1];i <= rect[3];i++) {
 		SetPixel(hWinDC, rect[0], i, RGB(0, 0, 255));
 		SetPixel(hWinDC, rect[2], i, RGB(0, 0, 255));
-	}*/
+	}
 	return TRUE;
 }
 
 
+int* judgeBlue(unsigned char r, unsigned char g, unsigned char b,int ss,int vv) {
+	double  H, S, V;
+	double Cmax = (double)max(max(r, g), b) / 255;
+	double Cmin = (double)min(min(r, g), b) / 255;
+	double delta = Cmax - Cmin;
+	if (delta == 0)
+		H = 0;
+	else if (Cmax == (double)r / 255)
+		H = ((double)(g - b) / delta / 255) * 60;
+	else if (Cmax == (double)g / 255)
+		H = (((double)(b - r) / delta / 255) + 2) * 60;
+	else
+		H = (((double)(r - g) / delta / 255) + 4) * 60;
+	if (Cmax == 0)
+		S = 0;
+	else
+		S = (delta / Cmax);
+	V = Cmax;
+	if (H < 0)
+		H += 360;
+	if (H < 0 || S < 0 || V < 0)
+		r = 0;
+	unsigned char h = H / 2, s = S * 255, v = V * 255;
+	//Image[index + 2] = h;
+	//Image[index + 1] = s;
+	//Image[index] = v;
+
+	if (h >= 100 && h <= 124 && s >= ss && v >= vv )
+		return new int[] {s, v};
+	return new int[] {0, 0};
+}
 
 /************************************************************************************************
 *																								*
@@ -351,50 +391,42 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 unsigned char* RGBToHSV(char* Image, int wImage, int hImage) {
 	int i, j;
 	unsigned char r, g, b;
-	double  H, S, V;
 	//每行宽度
 	unsigned int m_row_size = 4 * ((ImageColor * wImage + 3) / 4);
 	//二值化的蓝色区域图形
-	unsigned char* oImage = new unsigned char[wImage * hImage];
-	memset(oImage, 0, wImage * hImage);
-	double avg_v = 0;
-	for (i = 0; i < hImage; i++) {
-		double w_v = 0;
+	unsigned char* oImage = new unsigned char[wImage * hImage]();
+	long s_sum = 0,v_sum=0;
+	int count = 0;
+	int min_s=100,min_v=100;
+	int* s;
+	for (i = 0; i < hImage; i++) {	
 		for (j = 0; j < wImage; j++) {
 			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
-			r = (BYTE) Image[index + 2];
-			g = (BYTE) Image[index + 1];
-			b = (BYTE) Image[index];
-			double Cmax = (double) max(max(r, g), b) / 255;
-			double Cmin = (double) min(min(r, g), b) / 255;
-			double delta = Cmax - Cmin;
-			if (delta == 0)
-				H = 0;
-			else if (Cmax == (double)r / 255)
-				H = ((double)(g - b) / delta / 255)  * 60;
-			else if (Cmax == (double)g / 255)
-				H = (((double)(b - r) / delta / 255) + 2) * 60;
-			else 
-				H = (((double)(r - g) / delta / 255) + 4) * 60;
-			if (Cmax == 0)
-				S = 0;
-			else
-				S = (delta / Cmax);
-			V =Cmax;
-			if (H < 0)
-				H += 360;
-			if (H < 0 || S < 0 || V < 0)
-				r = 0;
-			unsigned char h = H / 2, s = S * 255, v = V * 255;
-			//Image[index + 2] = h;
-			//Image[index + 1] = s;
-			//Image[index] = v;
-			w_v += v;
-			if (h >= 100 && h <= 124 && s >= 140 && v >= 70)
-				oImage[i * wImage + j] = 255;
+			r = (BYTE)Image[index + 2];
+			g = (BYTE)Image[index + 1];
+			b = (BYTE)Image[index];
+			s = judgeBlue(r, g, b, 90,50);
+			if (s[0] > 0) {
+				s_sum += s[0];
+				v_sum += s[1];
+				min_s = min(min_s, s[0]);
+				min_v = min(min_v, s[1]);
+				count++;
 			}
-		
-		avg_v = ((avg_v * i) + w_v) / (i + 1);
+		}
+	}
+	Avg_s = ((s_sum / count) + min_s)/2 ;
+	Avg_v = ((v_sum / count) + min_v) / 2;
+	for (i = 0; i < hImage; i++) {
+		for (j = 0; j < wImage; j++) {
+			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
+			r = (BYTE)Image[index + 2];
+			g = (BYTE)Image[index + 1];
+			b = (BYTE)Image[index];
+			s = judgeBlue(r, g, b, Avg_s, Avg_v);
+			if (s[0] > 0)
+				oImage[i * wImage + j] = 255;
+		}
 	}
 
 	return oImage;
@@ -445,7 +477,7 @@ int* make_mask(unsigned char* data,int width,int height) {
 				}
 				//计算该联通区域是否近似为矩形
 				double wucha =(double) (max_h - min_h) * (max_w - min_w) / areas;
-				if (areas > 200 && wucha > 0.75 && wucha < 1.5) {
+				if (areas > 0.01*width*height && wucha > 0.75 && wucha < 1.5) {
 					//长宽比判断
 					double tmp = abs((double)(max_w - min_w) / (max_h - min_h) - 3.14);
 					if (tmp < wucha2) {
@@ -585,11 +617,62 @@ void ShowBMPImage(unsigned char* Image, int wImage, int hImage, int xPos, int yP
 	}
 }
 
+
 char* cut_license(int* rect ,char* oImage) {
 	int h = rect[3] - rect[1], w = rect[2] - rect[0];
+	int* rows_count = new int[h]();
+	int* cols_count = new int[w]();
+	int max_h = -1, min_h = 999, max_w = -1, min_w = 999;
 	unsigned int m_row_size1 = 4 * ((ImageColor * ImageWidth + 3) / 4);
-	unsigned int m_row_size2 = 4 * ((ImageColor * w + 3) / 4);
-	char* license = new char[h * m_row_size2 * ImageColor]();
+	/*
+	for (int i = 0; i < h; i++) {
+		for (int j = 0; j < w; j++) {
+			int index = (ImageHeight - rect[1] - i - 1) * m_row_size1 + (rect[0] + j) * ImageColor;
+			if (judgeBlue(oImage[index + 2], oImage[index + 1], oImage[index], Avg_s)) {
+				rows_count[i] += 1;
+				cols_count[j] += 1;	
+				max_h = max(i, max_h);
+				min_h = min(i, min_h);
+				max_w = max(j, max_w);
+				min_w = min(j, min_w);
+				
+			}
+		}
+	}
+	for (int i = 0; i < w-1; i++) {
+		if (min_w == -1) {
+			if ((double)(cols_count[i + 1] - cols_count[i]) / cols_count[i] > 0.5 && (double)(w - i) / w > 0.9)
+				min_w = max(min_w,i+1);
+		}
+		else {
+			if ((double)(cols_count[i] - cols_count[i + 1]) / cols_count[i + 1] > 0.8 && (double)(w - i) / w < 0.05) {
+				max_w = min(max_w,i);
+				break;
+			}
+		}
+	}
+	for (int i = 0; i < h - 1; i++) {
+		if (min_h == -1) {
+			if ((double)(rows_count[i + 1] - rows_count[i]) / rows_count[i] > 0.5 && (double)(h - i) / h > 0.8)
+				min_h = max(i+1,min_h);
+		}
+		else {
+			if ((double)(rows_count[i] - rows_count[i + 1]) / rows_count[i + 1] > 0.5 && (double)(h - i) / h < 0.2) {
+				max_h = min(i,max_h);
+				break;
+			}	
+		}
+	}
+	
+	rect[0] =  rect[0]+min_w ;
+	rect[1] =  rect[1]+min_h ;
+	rect[2] =  rect[0]+max_w ;
+	rect[3] =  rect[1]+max_h ;
+	h = rect[3] - rect[1];
+	w = rect[2] - rect[0];
+	*/
+	//unsigned int m_row_size2 = 4 * ((ImageColor * w + 3) / 4);
+	char* license = new char[h * w * ImageColor]();
 	//prepare data for write
 	for (int i = 0; i < h; i++) {
 		for (int j = 0; j < w; j++) {
@@ -597,9 +680,9 @@ char* cut_license(int* rect ,char* oImage) {
 			// int index2 = (h - i - 1) * m_row_size2 + j * ImageColor;
 			int index2 = (i * w + j) * 3;
 			license[index2] = oImage[index];
-			license[index2 + 1] = oImage[index + 1];
+			license[index2 + 1] = oImage[index + 2];
 			license[index2 + 2] = oImage[index + 2];
-			//SetPixel(hWinDC, j, i, RGB(license[index2 + 2], license[index2 + 1], license[index2]));
+			SetPixel(hWinDC, j, i, RGB(license[index2 + 2], license[index2 + 1], license[index2]));
 		}
 	}
 	return license;
@@ -639,7 +722,7 @@ void OTSU(unsigned char* img, int r ,int c) {
 	//阈值处理
 	for (int i = 0; i < r; ++i) {
 		for (int j = 0; j < c; ++j) {
-			if (img[i * c + j] > thresh)
+			if (img[i * c + j] > thresh+ thresh * 0.1)
 				img[i * c + j] = 255;
 			else
 				img[i * c + j] = 0;
@@ -718,6 +801,7 @@ unsigned char* remove_upanddown_border(unsigned char* img,int w,int h) {
 		}
 	}
 	ImageHeight = new_h;
+
 	return new_img;
 	
 	//char_segmentation(new_img, w, new_h);
@@ -761,20 +845,27 @@ void my_reszie(unsigned char* img, int ow, int oh, int nw, int nh,int xPos) {
 	WriteBMPImage(name, (char*)new_img, nw, nh);
 
 }
+
 void char_segmentation(unsigned char* img, int w, int h) {
 	int* col_histogram = new int[w]();
+	int col_min = h;
+	int col_sum = 0;
 	for (int i = 0; i < h; i++) {
-		for (int j = 0; j < w; j++) {
+		for (int j = 3; j < w-3; j++) {
 			if(img[i * w + j] == 255)
 				col_histogram[j] += 1;
 		}
+		col_min = min(col_min, col_histogram[i]);
+		col_sum += col_histogram[i];
 	}
+	double col_average = col_min / w;
+	double col_threshold = (col_min + col_average) / 2;
 	int tmp = 0, new_peak = 0, maxBlock = 0;
-	vector<int*>	zifuBlock;
+	vector<int*> zifuBlock;
 	for (int i = 0; i < w ; i++) {
-		if (col_histogram[i] != 0 && new_peak != 0)
+		if (col_histogram[i] > col_threshold && new_peak != 0)
 			tmp += col_histogram[i];
-		else if (col_histogram[i] != 0 && new_peak == 0) {
+		else if (col_histogram[i] > col_threshold && new_peak == 0) {
 			tmp = col_histogram[i];
 			new_peak = i;
 		}
@@ -786,10 +877,16 @@ void char_segmentation(unsigned char* img, int w, int h) {
 			new_peak = 0;
 		}
 	}
+	if (tmp != 0) {
+		maxBlock = max(tmp, maxBlock);
+		int* t = new int[] { tmp, new_peak, w };
+		zifuBlock.push_back(t);
+	}
 	vector<int*> licence_block;
 	double avg_w = 0;
 	for (int i = 0; i < zifuBlock.size(); i++) {
-		if (zifuBlock[i][0] > 0.1 * maxBlock) {
+		//排除噪点 ，选用的参照标准为大于数字1的面积
+		if (zifuBlock[i][0] > 0.6 * h * (w/40)) {
 			//排除左边缘
 			if (licence_block.size() == 0 && zifuBlock[i][0] < 0.5 * maxBlock)
 				continue;
@@ -800,6 +897,7 @@ void char_segmentation(unsigned char* img, int w, int h) {
 			break;
 	}
 	avg_w = avg_w / 7;
+	/*
 	for (int i = 0; i < licence_block.size(); i++) {
 		int* block = licence_block[i];
 		for (int j = 0; j < h; j++) {
@@ -809,6 +907,7 @@ void char_segmentation(unsigned char* img, int w, int h) {
 			}
 		}
 	}
+	
 	for (int i = 0; i < licence_block.size(); i++) {
 		int* block = licence_block[i];
 		int nw = block[2] - block[1];
@@ -828,6 +927,26 @@ void char_segmentation(unsigned char* img, int w, int h) {
 		}
 		my_reszie(first_block, nw, nh, 32, 40, i * 40);
 	}
-
+	*/
+	for (int i = 0; i < licence_block.size(); i++) {
+		int* block = licence_block[i];
+		int nw = block[2] - block[1];
+		//如果为1，则向两边扩张
+		if (nw < avg_w / 2) {
+			block[1] = block[1] - avg_w / 3;
+			block[2] = block[2] + avg_w / 3;
+			nw = block[2] - block[1];
+		}
+		else
+			nw += 2;
+		int nh = h + 4;
+		unsigned char* first_block = new unsigned char[nh * nw]();
+		for (int j = 0; j < h; j++) {
+			for (int k = 0; k < nw; k++) {
+				first_block[(j + 2) * nw + k] = img[j * w + block[1] - 1 + k];
+			}
+		}
+		my_reszie(first_block, nw, nh, 32, 40, i * 40);
+	}
 	
 }
