@@ -24,6 +24,12 @@
     <ClCompile Include="test2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="re.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="py_call.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="test2.rc">
@@ -41,6 +47,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="test2.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="re.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="py_call.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

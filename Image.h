@@ -9,7 +9,7 @@ void ShowBMPImage(unsigned char *, int, int, int, int);
 unsigned char* RGBToHSV(char* , int , int );
 void dilation(unsigned char*, int, int, int, int);
 void erosion(unsigned char*, int, int, int, int);
-int* make_mask(unsigned char* data, int width, int height);
+int* make_mask(unsigned char* data, long width, long height);
 char* cut_license(int* rect, char* oImage);
 void OTSU(unsigned char* img, int r, int c);
 unsigned char* remove_upanddown_border(unsigned char* img, int w, int h);

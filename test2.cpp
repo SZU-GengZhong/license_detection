@@ -11,7 +11,7 @@
 HINSTANCE hInst;								// current instance
 TCHAR szTitle[MAX_LOADSTRING];								// The title bar text
 TCHAR szWindowClass[MAX_LOADSTRING];								// The title bar text
-char* images = new char[(1024 * 1024 * 3)];
+char* images = new char[(4096 * 4096 * 3)];
 
 // Foward declarations of functions included in this code module:
 ATOM				MyRegisterClass(HINSTANCE hInstance);
