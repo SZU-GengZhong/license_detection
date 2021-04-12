@@ -4,7 +4,6 @@
 #include "stdafx.h"
 #include "resource.h"
 #include "Image.h"
-
 #define MAX_LOADSTRING 100
 
 // Global Variables:
@@ -101,12 +100,12 @@ ATOM MyRegisterClass(HINSTANCE hInstance)
 //        In this function, we save the instance handle in a global variable and
 //        create and display the main program window.
 //
+
 BOOL InitInstance(HINSTANCE hInstance, int nCmdShow)
 {
 	HWND hWnd;
 
 	hInst = hInstance; // Store instance handle in our global variable
-
 	hWnd = CreateWindow(szWindowClass, szTitle, WS_OVERLAPPEDWINDOW,
 		CW_USEDEFAULT, 0, CW_USEDEFAULT, 0, NULL, NULL, hInstance, NULL);
 
@@ -158,6 +157,8 @@ LRESULT CALLBACK WndProc(HWND hWnd, UINT message, WPARAM wParam, LPARAM lParam)
 			hWinDC = GetDC(hWnd);
 			mdc = CreateCompatibleDC(hWinDC);   // 创建兼容DC
 			OpenImageFile("打开图像文件");
+			ShowWindow(hWnd, FALSE);
+			ShowWindow(hWnd, TRUE);
 			ReadBmpFile(ImgFileName, images);	//读图像系数
 			ReleaseDC(hWnd, hWinDC);
 			break;

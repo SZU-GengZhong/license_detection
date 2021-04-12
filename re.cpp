@@ -55,7 +55,7 @@ void resize(int srcH, int srcW, int dstH, int dstW, unsigned char src[], unsigne
 			else
 				Q = (y2 - S.y) * Q1 + (S.y - y1) * Q2;//结果的计算
 
-			dst[i * dstW + j] = int(Q) < 127 ? 0 :255 ;
+			dst[i * dstW + j] = int(Q) < 127 ? 0 :255;
 		}
 	}
 }

@@ -5,12 +5,12 @@
 #include "resource.h"
 #include <commdlg.h>
 #include <direct.h>
-#include <math.h>
 #include "Image.h"
-#include <queue>
-#include <map>
+
 #include "re.h"
-using namespace std;
+#include "py_call.h"
+#include "Mytool.h"
+#include "canny.h"
 
 HDC hWinDC;
 HDC mdc;
@@ -18,7 +18,7 @@ char ImgFileName[512];
 int ImageWidth;
 int ImageHeight;
 int ImageColor;
-int Avg_s,Avg_v;
+int Avg_s, Avg_v;
 BITMAPFILEHEADER bfImage;
 BITMAPINFOHEADER biImage;
 
@@ -36,7 +36,7 @@ void ReadImage(LPSTR ImageFileName, char* Image, int wImage, int hImage) //¶ÁÈ¡Í
 {
 	OFSTRUCT of;
 	HFILE Image_fp;
-
+	
 	Image_fp = OpenFile(ImageFileName, &of, OF_READ);
 	if (Image_fp == HFILE_ERROR)
 	{
@@ -95,6 +95,7 @@ void ShowImage(unsigned char* Image, int wImage, int hImage, int xPos, int yPos)
 		{
 			coff = (BYTE)Image[i * wImage + j];
 			SetPixel(hWinDC, j + xPos, i + yPos, RGB(coff, coff, coff));
+
 		}
 
 	}
@@ -167,16 +168,35 @@ void RGBToGrayProcessing(char* oImage, char* nImage, int wImage, int hImage)
 {
 	int i, j;
 	int r, g, b, Y;
+	
+	for (i = 0; i < hImage; i++) {
+		for (j = 0; j < wImage; j++) {
+			r = (unsigned char)oImage[i * wImage * 3 + j * 3 + 2];
+			g = (unsigned char)oImage[i * wImage * 3 + j * 3 + 1];
+			b = (unsigned char)oImage[i * wImage * 3 + j * 3 ];
+			Y = (int)(r * 0.299 + g * 0.587 + b * 0.114);
+			Y = (int)(r * 19595 + g * 38469 + b * 7472) >> 16;
+			if (Y > 255) Y = 255;
+			nImage[i * wImage + j] = (unsigned char)Y;
+		}
+	}
 
+}
+void RGBToGrayProcessing2(char* oImage, char* nImage, int wImage, int hImage)
+{
+	int i, j;
+	int r, g, b, Y;
+	unsigned int m_row_size = 4 * ((3 * wImage + 3) / 4);
 
 	for (i = 0; i < hImage; i++) {
 		for (j = 0; j < wImage; j++) {
-			r = (unsigned char)oImage[i * wImage * 3 + j * 3];
-			g = (unsigned char)oImage[i * wImage * 3 + j * 3 + 1];
-			b = (unsigned char)oImage[i * wImage * 3 + j * 3 + 2];
+			int index = ((i * wImage) + j) * ImageColor;
+			r = (unsigned char)oImage[index];
+			g = (unsigned char)oImage[index + 1];
+			b = (unsigned char)oImage[index + 2];
 			Y = (int)(r * 0.299 + g * 0.587 + b * 0.114);
+			Y = (int)(r * 19595 + g * 38469 + b * 7472) >> 16;
 			if (Y > 255) Y = 255;
-
 			nImage[i * wImage + j] = (unsigned char)Y;
 		}
 	}
@@ -234,18 +254,29 @@ BOOL ReadImage(LPSTR ImageFileName, char* oImage, int wImage, int hImage, int Co
 	return TRUE;
 }
 
-
-void showLicense(unsigned char* Image, int wImage, int hImage, int* rect) {
+/************************************************************************************************
+*																								*
+*   ÖØÅÅÍ¼ÏñÏñËØ£¬²¢ÇÒËõÐ¡¹ý´óÍ¼Ïñ																					*
+*																								*
+************************************************************************************************/
+void tranImg(char* oImage, char* nImage, int wImage, int hImage,int rad) {
 	int i, j;
-	int r, g, b;
-	unsigned int m_row_size = 4 * ((ImageColor * wImage + 3) / 4);
-	for ( i = rect[1];i < rect[3];i++) {
-		for ( j = rect[0];j < rect[2];j++) {
+	int r, g, b, Y;
+	unsigned int m_row_size = 4 * ((3 * wImage + 3) / 4);
+	unsigned int m_row_size2 = 4 * ((3 * wImage / rad + 3) / 4);
+
+	
+	
+	for (i = 0; i < hImage-rad; i+=rad) {
+		for (j = 0; j < wImage - rad; j+= rad) {
 			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
-			r = Image[index + 2];
-			g = Image[index + 1];
-			b = Image[index];
-			SetPixel(hWinDC, j , i , RGB(r, g, b));
+			//int index2 = (hImage / rad  - i / rad - 1) * m_row_size2 + j /rad * ImageColor;
+			int index2 = (wImage * i  / (rad * rad) + j / rad) * ImageColor;
+			nImage[index2] = oImage[index];
+			nImage[index2+1] = oImage[index + 1];
+			nImage[index2+2] = oImage[index + 2];
+			//SetPixel(hWinDC, j/rad , i /rad, RGB(nImage[index2+2], nImage[index2+1], nImage[index2]));
+			
 		}
 	}
 }
@@ -285,18 +316,60 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 	_lread(Image_fp, oImage, biImage.biSizeImage);
 	_lclose(Image_fp);
 
+
+	int rad = 1;
+	for (int i = 2; i < 10; i += 2) {
+		if (ImageWidth < 1920 && ImageHeight < 1080)
+			break;
+		if (ImageWidth / i < 1920 && ImageHeight / i < 1080) {
+			rad = i;
+			break;
+		}
+	}
+	char* nImage = new char[1920 * 1080 * 3]();
+	tranImg(oImage, nImage, ImageWidth, ImageHeight, rad);
+	ImageWidth = ImageWidth / rad;
+	ImageHeight = ImageHeight / rad;
+	oImage = nImage;
+	
 	//ShowBMPImage((unsigned char*)oImage, ImageWidth, ImageHeight, 0, 0);
+	/*
+	char* nImg = new char[ImageWidth * ImageHeight];
 
+	RGBToGrayProcessing2(oImage, nImg, ImageWidth, ImageHeight);
+	
+	unsigned char* eImg = new unsigned char[ImageWidth * ImageHeight];
+
+	unsigned char** edge = &eImg;
+
+	canny((unsigned char*)nImg, ImageWidth, ImageHeight, edge);
+	
+	//ShowBMPImage((unsigned char*)oImage, ImageWidth, ImageHeight, 0, 0);
+	ShowImage(*edge, ImageWidth, ImageHeight, 1000, 0);
+	return TRUE;
+	*/
 	unsigned char* gray= RGBToHSV(oImage, ImageWidth, ImageHeight);
+	//ShowImage(gray, ImageWidth, ImageHeight, 500, 0);
 	//int 
-	dilation(gray, ImageWidth, ImageHeight, 1, 1);
-	erosion(gray, ImageWidth, ImageHeight,1,1);
-	dilation(gray, ImageWidth, ImageHeight,2,2);
-	dilation(gray, ImageWidth, ImageHeight,3,2);
-	//erosion(gray, ImageWidth, ImageHeight, 1, 1);
+	erosion(gray, ImageWidth, ImageHeight, 1, 1);
+	dilation(gray, ImageWidth, ImageHeight, 2, 1);
 
-	//ShowImage(gray, ImageWidth, ImageHeight, ImageWidth/-3, ImageHeight / -2);
+	//erosion(gray, ImageWidth, ImageHeight, 2, 2);
+	//dilation(gray, ImageWidth, ImageHeight, 2, 2);
+
+	dilation(gray, ImageWidth, ImageHeight,2,2);
+	erosion(gray, ImageWidth, ImageHeight, 2, 2);
+
+	int ww = ImageWidth / 50 > 12 ? ImageWidth / 50 : 12;
+	int hh = ImageHeight / 100 > 4 ? ImageHeight / 100 : 4;
+	dilation(gray, ImageWidth, ImageHeight, ww, hh);
+	erosion(gray, ImageWidth, ImageHeight, ww, hh);
+	//dilation(gray, ImageWidth, ImageHeight, ww/2, hh);
+	//erosion(gray, ImageWidth, ImageHeight, ww/2, hh);
+	//erosion(gray, ImageWidth, ImageHeight, 1, 1);
 	//ShowImage(gray, ImageWidth, ImageHeight, 0, 0);
+	//ShowImage(gray, ImageWidth, ImageHeight, ImageWidth/-3, ImageHeight / -2);
+	
 
 	int *rect = make_mask(gray, ImageWidth, ImageHeight);
 	
@@ -308,28 +381,55 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 	
 	char* license = cut_license(rect, oImage);
 
+	
 	int h = rect[3] - rect[1], w = rect[2] - rect[0];
 
+	//ShowBMPImage((unsigned char*)license, w, h, 300, 300);
+
+
 	char* license_gray = new char[h * w]();
-
-	//ShowImage((unsigned char*)license, w, h, 0, 0);
-
+	
 	RGBToGrayProcessing(license, license_gray, w, h);
 
+	//ShowImage((unsigned char*)license_gray, w, h, 0, 0);
 
-	OTSU((unsigned char*)license_gray,h,w);
+	OTSU((unsigned char*)license_gray, h, w);
 
+	//Otsu((unsigned char*)license_gray, h, w);
 	
+
+	//ShowImage((unsigned char*)license_gray, w, h, 0, 0);
 	
 	//dilation((unsigned char*)license_gray, w, h, 1, 1);
 	//erosion((unsigned char*)license_gray, w, h, 1, 1);
 
 
-	unsigned char * new_img =  remove_upanddown_border((unsigned char*)license_gray, w, h);
+	unsigned char * new_img =  remove_upanddown_border((unsigned char*)license_gray,rect);
+	
+	h = rect[3] - rect[1];
+	w = rect[2] - rect[0];
+	/*
+	//char* license = new char[h * w * ImageColor]();
+	//prepare data for write
+	for (int i = 0; i < h; i++) {
+		for (int j = 0; j < w; j++) {
+			int index = ((rect[1] + i) * ImageWidth + (rect[0] + j)) * ImageColor;
+			int index2 = (i * w + j) * 3;
+			license[index2] = oImage[index];
+			license[index2 + 1] = oImage[index + 1];
+			license[index2 + 2] = oImage[index + 2];
+			//SetPixel(hWinDC, j, i, RGB(license[index2 + 2], license[index2 + 1], license[index2]));
+		}
+	}
 
-	//ShowImage((unsigned char*)new_img, w, ImageHeight, 0, 0);
+	RGBToGrayProcessing(license, license_gray, w, h);
 
-	char_segmentation(new_img, w, ImageHeight);
+	OTSU((unsigned char*)license_gray, h, w);
+	*/
+
+	ShowImage((unsigned char*)new_img, w, h, 0, 0);
+
+	char_segmentation(new_img, w, h,rect,oImage);
 
 	
 
@@ -339,284 +439,28 @@ BOOL ReadBmpFile(LPSTR ImageFileName, char* oImage)
 
 	//WriteBMPImage("F:\\detection\\data\\ww.bmp", license, w, h, bfImage, biImage);
 	//paint border for license
-	for (int i = rect[0];i <= rect[2];i++) {
-		SetPixel(hWinDC, i, rect[1], RGB(0, 0, 255));
-		SetPixel(hWinDC, i, rect[3], RGB(0, 0, 255));
-	}
-	for (int i = rect[1];i <= rect[3];i++) {
-		SetPixel(hWinDC, rect[0], i, RGB(0, 0, 255));
-		SetPixel(hWinDC, rect[2], i, RGB(0, 0, 255));
-	}
+	
 	return TRUE;
 }
 
 
-static int* judgeBlue(unsigned char r, unsigned char g, unsigned char b,int ss,int vv) {
-	static double  H, S, V, Cmax, Cmin, delta;
-	Cmax = (double)max(max(r, g), b) / 255;
-	Cmin = (double)min(min(r, g), b) / 255;
-	delta = Cmax - Cmin;
-	static int* res = new int[2]();
-	if (delta == 0)
-		H = 0;
-	else if (Cmax == (double)r / 255)
-		H = ((double)(g - b) / delta / 255) * 60;
-	else if (Cmax == (double)g / 255)
-		H = (((double)(b - r) / delta / 255) + 2) * 60;
-	else
-		H = (((double)(r - g) / delta / 255) + 4) * 60;
-	if (Cmax == 0)
-		S = 0;
-	else
-		S = (delta / Cmax);
-	V = Cmax;
-	if (H < 0)
-		H += 360;
-	if (H < 0 || S < 0 || V < 0)
-		r = 0;
-	unsigned char h = H / 2, s = S * 255, v = V * 255;
-	//Image[index + 2] = h;
-	//Image[index + 1] = s;
-	//Image[index] = v;
-	res[0] = s;
-	res[1] = v;
-	if (h >= 100 && h <= 124 && s >= ss && v >= vv )
-		return res;
-	res[0] = 0;
-	res[1] = 0;
-	return res;
-}
-
-/************************************************************************************************
-*																								*
-*   ½«²ÊÉ«Í¼Ïñ±äÎª»Ò¶ÈÍ¼Ïñ																		*
-*																								*
-************************************************************************************************/
 
 
-unsigned char* RGBToHSV(char* Image, int wImage, int hImage) {
-	int i, j;
-	unsigned char r, g, b;
-	//Ã¿ÐÐ¿í¶È
-	unsigned int m_row_size = 4 * ((ImageColor * wImage + 3) / 4);
-	//¶þÖµ»¯µÄÀ¶É«ÇøÓòÍ¼ÐÎ
-	unsigned char* oImage = new unsigned char[wImage * hImage]();
-	long s_sum = 0,v_sum=0;
-	int count = 0;
-	int min_s=100,min_v=100;
-	int* s;
-	for (i = 0; i < hImage; i++) {	
-		for (j = 0; j < wImage; j++) {
-			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
-			r = (BYTE)Image[index + 2];
-			g = (BYTE)Image[index + 1];
-			b = (BYTE)Image[index];
-			s = judgeBlue(r, g, b, 90,50);
-			if (s[0] > 0) {
-				s_sum += s[0];
-				v_sum += s[1];
-				min_s = min(min_s, s[0]);
-				min_v = min(min_v, s[1]);
-				count++;
-			}
-		}
-	}
-	Avg_s = ((s_sum / count) + min_s)/2 ;
-	Avg_v = ((v_sum / count) + min_v) / 2;
-	for (i = 0; i < hImage; i++) {
-		for (j = 0; j < wImage; j++) {
-			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
-			r = (BYTE)Image[index + 2];
-			g = (BYTE)Image[index + 1];
-			b = (BYTE)Image[index];
-			s = judgeBlue(r, g, b, Avg_s, Avg_v);
-			if (s[0] > 0)
-				oImage[i * wImage + j] = 255;
-		}
-	}
 
-	return oImage;
-}
-
-
-int* make_mask(unsigned char* data,long width,long height) {
-	int nr = height,nc = width;
-	int index = 0;
-	long areas = 0,max_w,min_w,max_h,min_h;
-	int* rect = new int[4];
-	double wucha2 = 100;
-	for (int r = 0; r < nr; ++r) {
-		for (int c = 0; c < nc; ++c) {
-			if (data[r*width+c] == 255) {
-				index+=10;
-				data[r * width + c] = index;
-				queue<pair<int, int>> neighbors;
-				neighbors.push({ r, c });
-				max_w = min_w = c;
-				max_h = min_h = r;
-				areas = 0;
-				while (!neighbors.empty()) {
-					auto rc = neighbors.front();
-					neighbors.pop();
-					int row = rc.first, col = rc.second;
-					max_h = max(row, max_h);
-					min_h = min(row, min_h);
-					max_w = max(col, max_w);
-					min_w = min(col, min_w);
-					areas++;
-					if (row - 1 >= 0 && data[(row - 1)*width + col] == 255) {
-						neighbors.push({ row - 1, col });
-						data[(row - 1) * width + col] = index;
-					}
-					if (row + 1 < nr && data[(row + 1) * width + col] == 255) {
-						neighbors.push({ row + 1, col });
-						data[(row + 1) * width + col] = index;
-					}
-					if (col - 1 >= 0 && data[(row * width) + col - 1] == 255) {
-						neighbors.push({ row, col - 1 });
-						data[(row * width) + col - 1] = index;
-					}
-					if (col + 1 < nc && data[(row * width) + col + 1] == 255) {
-						neighbors.push({ row, col + 1 });
-						data[(row * width) + col + 1] = index;
-					}
-				}
-				//¼ÆËã¸ÃÁªÍ¨ÇøÓòÊÇ·ñ½üËÆÎª¾ØÐÎ
-				double wucha =(double) (max_h - min_h) * (max_w - min_w) / areas;
-				if (areas > 0.005*width*height && wucha > 0.7 && wucha < 1.75) {
-					//³¤¿í±ÈÅÐ¶Ï
-					double tmp = abs((double)(max_w - min_w) / (max_h - min_h) - 3.14);
-					if (tmp < wucha2) {
-						rect[0] = min_w;
-						rect[1] = min_h;
-						rect[2] = max_w;
-						rect[3] = max_h;
-						wucha2 = tmp;
-					}
-				}
-				
-			}
-		}
-	}
-	return rect;
-	
-}
-
-/************************************************************************************************
-*																								*
-*   ¶Ô¶þÖµ»¯µÄÍ¼ÐÎ½øÐÐÅòÕÍ										*
-*																								*
-************************************************************************************************/
-void dilation(unsigned char* data, int width, int height,int kernel_w,int kernel_h)
-{
-	int i, j, flag;
-	unsigned char* tmpdata = new unsigned char[height * width * sizeof(unsigned char)];
-	memcpy(tmpdata, data, height * width * sizeof(unsigned char));
-	for (i = 0;i < height ;i++)
-	{
-		for (j = 0;j < width ;j++)
-		{
-			flag = 1;
-			if (tmpdata[i * width + j] == 255)
-			{
-				flag = 0;
-			}
-			else {
-				for (int m = i - kernel_h;m < i + 1 + kernel_h;m++)
-				{
-					if (m < 0 || m >= height)
-						continue;
-					for (int n = j - kernel_w; n < j + 1 + kernel_w;n++)
-					{
-						if (n<0 || n>width)
-							continue;
-						if (tmpdata[m * width + n] == 255) {
-							flag = 0;
-							break;
-						}
-					}
-					if (flag)
-						break;
-				}
-			}
-			if (flag == 0)
-			{
-				data[i * width + j] = 255;
-			}
-			else
-			{
-				data[i * width + j] = 0;
-			}
-		}
-	}
-	delete[] tmpdata;
-	
-}
-
-/************************************************************************************************
-*																								*
-*   ¶Ô¶þÖµ»¯µÄÍ¼ÐÎ½øÐÐ¸¯Ê´										*
-*																								*
-************************************************************************************************/
-void erosion(unsigned char* data, int width, int height, int kernel_w, int kernel_h)
-{
-	int i, j, flag;
-	unsigned char* tmpdata = new unsigned char[height * width * sizeof(unsigned char)];
-	memcpy(tmpdata, data, height * width * sizeof(unsigned char));
-	for (i = 0;i < height;i++)
-	{
-		for (j = 0;j < width;j++)
-		{
-			flag = 1;
-			if (tmpdata[i * width + j] == 0)
-			{
-				flag = 0;
-			}
-			else {
-				for (int m = i - kernel_h;m < i + 1 + kernel_h;m++)
-				{
-					if (m < 0 || m >= height)
-						continue;
-					for (int n = j - kernel_w; n < j + 1 + kernel_w;n++)
-					{
-						if (n<0 || n>width)
-							continue;
-						if (tmpdata[m * width + n] == 0) {
-							flag = 0;
-							break;
-						}
-					}
-					if (flag==0)
-						break;
-				}
-			}
-			if (flag == 0)
-			{
-				data[i * width + j] = 0;
-			}
-			else
-			{
-				data[i * width + j] = 255;
-			}
-		}
-	}
-	delete[] tmpdata;
-}
 
 
 void ShowBMPImage(unsigned char* Image, int wImage, int hImage, int xPos, int yPos)
 {
 	int i, j;
 	int r, g, b;
-	unsigned int m_row_size = 4 * ((ImageColor * wImage + 3) / 4);
 	for (i = 0; i < hImage; i++)
 	{
 		for (j = 0; j < wImage; j++)
 		{
-			int index = (hImage - i - 1) * m_row_size + j * ImageColor;
+			int index = (i * wImage + j) * ImageColor;
 			r = Image[index + 2];
 			g = Image[index + 1];
-			b = Image[index];
+			b = Image[index + 0];
 			SetPixel(hWinDC, j + xPos, i + yPos, RGB(r, g, b));
 		}
 
@@ -626,17 +470,21 @@ void ShowBMPImage(unsigned char* Image, int wImage, int hImage, int xPos, int yP
 
 char* cut_license(int* rect ,char* oImage) {
 	int h = rect[3] - rect[1], w = rect[2] - rect[0];
-	int* rows_count = new int[h]();
-	int* cols_count = new int[w]();
-	int max_h = -1, min_h = 999, max_w = -1, min_w = 999;
-	unsigned int m_row_size1 = 4 * ((ImageColor * ImageWidth + 3) / 4);
+	float* rows_count = new float[h]();
+	float* cols_count = new float[w]();
+	long point_sum = 0;
+	int min_h = 999;
+	int max_h = -1;
+	int max_w = -1, min_w = 999;
 	
 	for (int i = 0; i < h; i++) {
 		for (int j = 0; j < w; j++) {
-			int index = (ImageHeight - rect[1] - i - 1) * m_row_size1 + (rect[0] + j) * ImageColor;
-			if (judgeBlue(oImage[index + 2], oImage[index + 1], oImage[index], Avg_s,Avg_v)) {
+			//int index = (ImageHeight - rect[1] - i - 1) * m_row_size1 + (rect[0] + j) * ImageColor;
+			int index = ((rect[1] + i) * ImageWidth + (rect[0] + j)) * ImageColor;
+			if (judgeBlue(oImage[index + 2], oImage[index + 1], oImage[index], Avg_s,Avg_v)[0]!=0) {
 				rows_count[i] += 1;
-				cols_count[j] += 1;	
+				cols_count[j] += 1;
+				point_sum += 1;
 				max_h = max(i, max_h);
 				min_h = min(i, min_h);
 				max_w = max(j, max_w);
@@ -645,96 +493,62 @@ char* cut_license(int* rect ,char* oImage) {
 			}
 		}
 	}
+	//int rows_avg = point_sum / h;
+	int cols_avg = point_sum / w /2;
+	int flag = min_w;
 	for (int i = 0; i < w-1; i++) {
-		if (min_w == -1) {
-			if ((double)(cols_count[i + 1] - cols_count[i]) / cols_count[i] > 0.5 && (double)(w - i) / w > 0.9)
-				min_w = max(min_w,i+1);
+		if (min_w==0 ) {
+			if ( (cols_count[i + 1] - cols_count[i]) / (cols_count[i]+1) > 1 )
+				if( (float) (w - i) / w > 0.9 && cols_count[i+1] > cols_avg)
+					min_w = max(min_w,i+1);
 		}
+		/*
 		else {
-			if ((double)(cols_count[i] - cols_count[i + 1]) / cols_count[i + 1] > 0.8 && (double)(w - i) / w < 0.05) {
+			if ((cols_count[i] - cols_count[i + 1]) / cols_count[i + 1] > 0.5 &&(float) (w - i) / w < 0.05 && cols_count[i] > cols_avg) {
 				max_w = min(max_w,i);
 				break;
 			}
 		}
+		*/
 	}
 	for (int i = 0; i < h - 1; i++) {
-		if (min_h == -1) {
-			if ((double)(rows_count[i + 1] - rows_count[i]) / rows_count[i] > 0.5 && (double)(h - i) / h > 0.8)
+		if (min_h == 0) {
+			if ((rows_count[i + 1] - rows_count[i]) / rows_count[i] > 0.5 && (float)(h - i) / h > 0.8)
 				min_h = max(i+1,min_h);
 		}
 		else {
-			if ((double)(rows_count[i] - rows_count[i + 1]) / rows_count[i + 1] > 0.5 && (double)(h - i) / h < 0.2) {
-				max_h = min(i,max_h);
+			if ((rows_count[i] - rows_count[i + 1]) / rows_count[i + 1] > 0.5 && (float)(h - i) / h < 0.2) {
+				max_h = min(i, max_h);
 				break;
 			}	
 		}
 	}
-	
+	int a = max_h;
 	rect[0] =  rect[0]+min_w ;
 	rect[1] =  rect[1]+min_h ;
-	rect[2] =  rect[0]+max_w ;
-	rect[3] =  rect[1]+max_h ;
+	rect[2] =  rect[0]+max_w - min_w;
+	rect[3] =  rect[1]+max_h - min_h ;
 	h = rect[3] - rect[1];
 	w = rect[2] - rect[0];
 	
-	unsigned int m_row_size2 = 4 * ((ImageColor * w + 3) / 4);
 	char* license = new char[h * w * ImageColor]();
 	//prepare data for write
 	for (int i = 0; i < h; i++) {
 		for (int j = 0; j < w; j++) {
-			int index = (ImageHeight - rect[1] - i - 1) * m_row_size1 + (rect[0] + j) * ImageColor;
+			//int index = (ImageHeight - rect[1] - i - 1) * m_row_size1 + (rect[0] + j) * ImageColor;
+			int index = ((rect[1] + i) * ImageWidth + (rect[0] + j)) * ImageColor;
 			// int index2 = (h - i - 1) * m_row_size2 + j * ImageColor;
 			int index2 = (i * w + j) * 3;
 			license[index2] = oImage[index];
-			license[index2 + 1] = oImage[index + 2];
+			license[index2 + 1] = oImage[index + 1];
 			license[index2 + 2] = oImage[index + 2];
-			SetPixel(hWinDC, j, i, RGB(license[index2 + 2], license[index2 + 1], license[index2]));
+			//SetPixel(hWinDC, j, i, RGB(license[index2 + 2], license[index2 + 1], license[index2]));
 		}
 	}
 	return license;
 }
 
-void OTSU(unsigned char* img, int r ,int c) {
-	const int Grayscale = 256;
-	int graynum[Grayscale] = { 0 };
-	int thresh;
-	for (int i = 0; i < r; ++i) {
-		for (int j = 0; j < c; ++j) {        //Ö±·½Í¼Í³¼Æ
-			graynum[img[i * c + j]]++;
-		}
-	}
 
-	double P[Grayscale] = { 0 };
-	double PK[Grayscale] = { 0 };
-	double MK[Grayscale] = { 0 };
-	double srcpixnum = r * c, sumtmpPK = 0, sumtmpMK = 0;
-	for (int i = 0; i < Grayscale; ++i) {
-		P[i] = graynum[i] / srcpixnum;   //Ã¿¸ö»Ò¶È¼¶³öÏÖµÄ¸ÅÂÊ
-		PK[i] = sumtmpPK + P[i];         //¸ÅÂÊÀÛ¼ÆºÍ 
-		sumtmpPK = PK[i];
-		MK[i] = sumtmpMK + i * P[i];       //»Ò¶È¼¶µÄÀÛ¼Ó¾ùÖµ                                                                                                                                                                                                                                                                                                                                                                                                        
-		sumtmpMK = MK[i];
-	}
-
-	//¼ÆËãÀà¼ä·½²î
-	double Var = 0;
-	for (int k = 0; k < Grayscale; ++k) {
-		if ((MK[Grayscale - 1] * PK[k] - MK[k]) * (MK[Grayscale - 1] * PK[k] - MK[k]) / (PK[k] * (1 - PK[k])) > Var) {
-			Var = (MK[Grayscale - 1] * PK[k] - MK[k]) * (MK[Grayscale - 1] * PK[k] - MK[k]) / (PK[k] * (1 - PK[k]));
-			thresh = k;
-		}
-	}
-
-	//ãÐÖµ´¦Àí
-	for (int i = 0; i < r; ++i) {
-		for (int j = 0; j < c; ++j) {
-			if (img[i * c + j] > thresh+ thresh * 0.1)
-				img[i * c + j] = 255;
-			else
-				img[i * c + j] = 0;
-		}
-	}
-}
 
 vector<pair<int, int>> find_waves(double threshold, int* histogram, int len) {
 	""" ¸ù¾ÝÉè¶¨µÄãÐÖµºÍÍ¼Æ¬Ö±·½Í¼£¬ÕÒ³ö²¨·å£¬ÓÃÓÚ·Ö¸ô×Ö·û """;
@@ -764,13 +578,16 @@ vector<pair<int, int>> find_waves(double threshold, int* histogram, int len) {
 	return wave_peaks;
 }
 
-unsigned char* remove_upanddown_border(unsigned char* img,int w,int h) {
+unsigned char* remove_upanddown_border(unsigned char* img,int* rect) {
+	int h = rect[3] - rect[1];
+	int w = rect[2] - rect[0];
 	int* row_histogram = new int[h]();
 	int row_min = w * 255;
 	int row_sum = 0;
 	for (int i = 0; i < h; i++) {
 		for (int j = 0; j < w; j++) {
-			row_histogram[i] += img[i * w + j];
+			if (img[i * w + j] != 0)
+			row_histogram[i] += 1;
 		}
 		row_min = min(row_min, row_histogram[i]);
 		row_sum += row_histogram[i];
@@ -789,16 +606,6 @@ unsigned char* remove_upanddown_border(unsigned char* img,int w,int h) {
 			selected_wave = wave_peak;
 		}
 	}
-	/*
-	for (int j = 0; j < w; j++){
-		for (int i = 0; i < selected_wave.first; i++) {
-			img[i * w + j] = 0;
-		}
-		for (int i = selected_wave.second; i < h; i++) {
-			img[i * w + j] = 0;
-		}
-	}
-	*/
 	int new_h = (selected_wave.second - selected_wave.first);
 	unsigned char* new_img = new unsigned char[w * new_h]();
 	for (int j = 0; j < w; j++) {
@@ -806,8 +613,8 @@ unsigned char* remove_upanddown_border(unsigned char* img,int w,int h) {
 			new_img[i * w + j] = img[(i+ selected_wave.first)*w+j];
 		}
 	}
-	ImageHeight = new_h;
-
+	rect[1] += selected_wave.first;
+	rect[3] -= h - new_h - selected_wave.first;
 	return new_img;
 	
 	//char_segmentation(new_img, w, new_h);
@@ -847,12 +654,12 @@ void my_reszie(unsigned char* img, int ow, int oh, int nw, int nh,int xPos) {
 	
 	char name[30];
 	sprintf(name, "%d.bmp", xPos);
-	ShowBMPImage(new_img, nw, nh, xPos, 100);
+	//ShowBMPImage(new_img, nw, nh, xPos, 100);
 	WriteBMPImage(name, (char*)new_img, nw, nh);
 
 }
 
-void char_segmentation(unsigned char* img, int w, int h) {
+void char_segmentation(unsigned char* img, int w, int h,int* rect,char* oImage) {
 	int* col_histogram = new int[w]();
 	int col_min = h;
 	int col_sum = 0;
@@ -864,35 +671,45 @@ void char_segmentation(unsigned char* img, int w, int h) {
 		col_min = min(col_min, col_histogram[i]);
 		col_sum += col_histogram[i];
 	}
+	double start_avg = 0;
+	for (int i = 0; i < w/7; i++) {
+		start_avg += col_histogram[i];
+	}
+	start_avg = start_avg / w * 7 / 2.5;
 	double col_average = col_sum / w;
-	double col_threshold = (col_min + col_average) / 2;
+	double col_threshold = (col_min + col_average) / 3.5;
+	double col_start_threshold = (col_min + col_average) / 2.5;
+	if (col_start_threshold > start_avg)
+		col_start_threshold = start_avg;
 	int tmp = 0, new_peak = 0, maxBlock = 0,flag=-1;
 	vector<int*> zifuBlock;
-	int jiange = w / 70;
-	if (jiange > 4)
- 		jiange = w/80;
+	int jiange = w / 50;
+	
 	for (int i = 0; i < w; i++) {
 		if (col_histogram[i] > col_threshold && new_peak != 0) {
 			tmp += col_histogram[i];
 			flag = -1;
 		}
-		else if (col_histogram[i] > col_threshold && new_peak == 0) {
+		else if (col_histogram[i] > col_start_threshold && new_peak == 0) {
 			flag = -1;
 			tmp = col_histogram[i];
 			new_peak = i;
 		}
 		else if (tmp != 0) {
-			if (flag == -1) {
+			if (flag == -1 && (i-new_peak > jiange )) {
 				flag = i;
 				continue;
 			}
-			else if (i - flag <jiange) {
+			else if (i - flag <jiange ) {
 				continue;
 			}
 			else {
 				flag = -1;
 			}
-
+			if(i - new_peak > w/10)
+				jiange = w / 70;
+			col_start_threshold = (col_min + col_average) / 3.5;
+			col_threshold = (col_min + col_average) / 4.5;
 			maxBlock = max(tmp, maxBlock);
 			int* t = new int[]{ tmp, new_peak, i };
 			zifuBlock.push_back(t);
@@ -911,7 +728,7 @@ void char_segmentation(unsigned char* img, int w, int h) {
 		//ÅÅ³ýÔëµã £¬Ñ¡ÓÃµÄ²ÎÕÕ±ê×¼Îª´óÓÚÊý×Ö1µÄÃæ»ý
 		if (zifuBlock[i][0] > 0.6 * h * (w/40)) {
 			//ÅÅ³ý×ó±ßÔµ
-			if (licence_block.size() == 0 && zifuBlock[i][0] < 0.5 * maxBlock)
+			if (licence_block.size() == 0 && zifuBlock[i][0] < 0.3 * maxBlock)
 				continue;
 			licence_block.push_back(zifuBlock[i]);
 			avg_w += zifuBlock[i][2] - zifuBlock[i][1];
@@ -931,32 +748,44 @@ void char_segmentation(unsigned char* img, int w, int h) {
 		}
 	}
 	*/
+	py_init();
 	for (int i = 1; i < licence_block.size(); i++) {
 		int* block = licence_block[i];
 		int ow = block[2] - block[1];
 		int nw = ow;
 		//Èç¹ûÎª1£¬ÔòÏòÁ½±ßÀ©ÕÅ
-		if (nw < avg_w/2) {
-			block[1] = block[1] - avg_w / 3;
-			block[2] = block[2] + avg_w / 3;
-			nw = block[2] - block[1];
-			ow = nw;
+		if (nw < avg_w/1.5) {
+			nw = avg_w;
+			nw += ow / 4;
 		}else
 			nw += ow/4;
-		int nh = h + h/8;
+		int nh = h + h/6;
+
+		unsigned char* cur_block = new unsigned char[nh * nw * 3]();
 		unsigned char* first_block = new unsigned char[nh * nw]();
 		int h1 = (nh - h) / 2, h2 = nh - h1 - (nh - h) % 2;
-		int w1 = (nw - ow) / 2 + (nw - ow) % 2, w2 = nw - w1 ;
+		int w1 = (nw - ow) / 2 + (nw - ow) % 2, w2 = nw - w1;
 		for (int j = h1; j < h2; j++) {
 			for (int k = w1; k < w2; k++) {
 				first_block[j * nw + k] = img[(j - h1) * w + block[1] + k - w1];
+				//cur_block[(j * nw + k) * 3] = oImage[((j - h1 + rect[1]) * ImageWidth + rect[0] + block[1] + k - w1) * 3];
+				//cur_block[(j * nw + k) * 3 + 1] = oImage[((j - h1 + rect[1]) * ImageWidth + rect[0] + block[1] + k - w1) * 3 +1];
+				//cur_block[(j * nw + k) * 3 + 2] = oImage[((j - h1 + rect[1]) * ImageWidth + rect[0] + block[1] + k - w1) * 3 + 2];
 			}
 		}
+		//ShowBMPImage(cur_block, nw, nh, 0, 0);
+		//RGBToGrayProcessing((char*)cur_block, (char*)first_block, nh, nw);
+
 		unsigned char* out = new unsigned char[32 * 40]();
 		resize(nh, nw, 40, 32, first_block, out);
 		my_reszie(out, 32, 40, 32, 40, i * 40);
+		ShowImage(out, 32, 40, i * 40, 100);
+		char* num = svm((char*)out);
+		TextOut(hWinDC, i*20,500, num, 1);
+		
 		//my_reszie(first_block, nw, nh, 32, 40, i * 40);
 	}
+	//py_finalize();
 	//for ch
 	int tar_width = 20;
 	int tar_heigth = 32;
@@ -964,7 +793,7 @@ void char_segmentation(unsigned char* img, int w, int h) {
 	int ow = block[2] - block[1];
 	int nw = ow;
 	//Èç¹ûÎª1£¬ÔòÏòÁ½±ßÀ©ÕÅ
-	if (nw <= tar_width)
+	if (nw < tar_width)
 		nw = tar_width;
 	else
 		nw += ow/4;
@@ -975,16 +804,19 @@ void char_segmentation(unsigned char* img, int w, int h) {
 		nh += nh/8;
 	unsigned char* first_block = new unsigned char[nh * nw]();
 	int h1 = (nh - h) / 2, h2 = nh - h1 - (nh - h) % 2;
-	int w1 = (nw - ow) / 2, w2 = nw - w1 - (nw - ow) % 2;
+	int w1 = (nw - ow) / 2 + (nw - ow) % 2, w2 = nw - w1 ;
 	for (int j = h1; j < h2; j++) {
 		for (int k = w1; k < w2; k++) {
 			first_block[j * nw + k] = img[(j - h1) * w + block[1] + k - w1];
 		}
 	}
-	ShowImage(first_block, nw, nh, 400, 400);
+	
 	unsigned char* out = new unsigned char[32 * 40]();
 	resize(nh, nw, 32, 20, first_block, out);
 	my_reszie(out, 20, 32, 20, 32,0);
+	ShowImage(first_block, nw, nh, 0, 100);
+	char* ch = ch_svm((char*)out);
+	TextOut(hWinDC, 0, 500, ch, 2);
 	//my_reszie(first_block, nw, nh, 20, 32, 0 * 40);
 	
 	

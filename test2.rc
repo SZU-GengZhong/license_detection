@@ -114,13 +114,28 @@ END
 
 /////////////////////////////////////////////////////////////////////////////
 //
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_ABOUTBOX, DIALOG
+    BEGIN
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
 // String Table
 //
 
 STRINGTABLE
 BEGIN
     IDS_APP_TITLE           "test2"
-    IDS_HELLO               "Hello World!"
+    IDS_HELLO               "…Ó¥Û"
     IDC_TEST2               "TEST2"
 END
 

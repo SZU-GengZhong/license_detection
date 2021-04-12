@@ -30,6 +30,12 @@
     <ClCompile Include="py_call.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Mytool.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="canny.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="test2.rc">
@@ -53,6 +59,12 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="py_call.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Mytool.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="canny.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
